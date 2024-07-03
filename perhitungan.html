@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hasil Perhitungan DP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #F5F9FC;
+            background-size: cover;
+            background-attachment:fixed;
+            color: #2F3879;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: #D8E7DF;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #a2c4b2;
+        }
+        .process-step {
+            margin: 20px 0;
+        }
+        button {
+            border-radius: 5px;
+            padding: 10px;
+            margin: 5px 0;
+            width: 200px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <h1>Hasil Perhitungan Dynamic Programming</h1>
+    <div>
+        <h3>Matriks Jarak (km)</h3>
+        <table id="dp-results"></table>
+    </div>
+    <div id="dp-process"></div>
+    <div id="best-route"></div>
+    <button onclick="goBack()">Kembali ke Hasil Rute</button>
+
+    <script>
+        // Ambil lokasi dan urutan dari sessionStorage
+        var locations = JSON.parse(sessionStorage.getItem('locations'));
+        var order = JSON.parse(sessionStorage.getItem('order'));
+
+        // Fungsi untuk menghitung jarak Euclidean dalam kilometer
+        function calculateDistance(coord1, coord2) {
+            var R = 6371; // Radius of the Earth in km
+            var dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
+            var dLon = (coord2[1] - coord1[1]) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(coord1[0] * Math.PI / 180) * Math.cos(coord2[0] * Math.PI / 180) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // Fungsi untuk menghitung total jarak suatu rute
+        function calculateTotalDistance(route, distances) {
+            var totalDistance = 0;
+            for (var i = 0; i < route.length - 1; i++) {
+                totalDistance += distances[route[i]][route[i + 1]];
+            }
+            return totalDistance;
+        }
+
+        // Fungsi untuk mendapatkan semua permutasi dari array
+        function permute(permutation) {
+            var length = permutation.length,
+                result = [permutation.slice()],
+                c = new Array(length).fill(0),
+                i = 1, k, p;
+
+            while (i < length) {
+                if (c[i] < i) {
+                    k = i % 2 && c[i];
+                    p = permutation[i];
+                    permutation[i] = permutation[k];
+                    permutation[k] = p;
+                    ++c[i];
+                    i = 1;
+                    result.push(permutation.slice());
+                } else {
+                    c[i] = 0;
+                    ++i;
+                }
+            }
+            return result;
+        }
+
+        // Fungsi untuk menampilkan hasil DP
+        function displayDPResults() {
+            var distances = [];
+            for (var i = 0; i < locations.length; i++) {
+                distances[i] = [];
+                for (var j = 0; j < locations.length; j++) {
+                    distances[i][j] = calculateDistance(locations[i].coord, locations[j].coord);
+                }
+            }
+
+            var dpResults = document.getElementById('dp-results');
+            var tableHTML = '<tr><th>Lokasi</th>';
+            locations.forEach((loc, i) => {
+                tableHTML += `<th>${loc.name} (${String.fromCharCode(65 + i)})</th>`;
+            });
+            tableHTML += '</tr>';
+
+            for (var i = 0; i < distances.length; i++) {
+                tableHTML += `<tr><th>${locations[i].name} (${String.fromCharCode(65 + i)})</th>`;
+                for (var j = 0; j < distances[i].length; j++) {
+                    tableHTML += `<td>${distances[i][j].toFixed(2)}</td>`;
+                }
+                tableHTML += '</tr>';
+            }
+            dpResults.innerHTML = tableHTML;
+
+            displayDPProcess(distances);
+        }
+
+        // Fungsi untuk menampilkan proses DP dan rute terbaik
+        function displayDPProcess(distances) {
+            var remainingLocations = [];
+            for (var i = 1; i < locations.length; i++) remainingLocations.push(i);
+            var currentLocation = 0;
+            var order = [0];
+
+            var dpProcess = document.getElementById('dp-process');
+            dpProcess.innerHTML = '<h3>Proses Perhitungan</h3>';
+
+            // Semua permutasi dari rute
+            var allPermutations = permute(remainingLocations);
+            var bestRoute = null;
+            var minDistance = Infinity;
+
+            allPermutations.forEach(function(perm) {
+                var route = [0].concat(perm).concat([0]);
+                var totalDistance = calculateTotalDistance(route, distances);
+                if (totalDistance < minDistance) {
+                    minDistance = totalDistance;
+                    bestRoute = route;
+                }
+
+                var stepDetails = `<div class="process-step">
+                    <strong>Rute: ${route.map(i => locations[i].name + ` (${String.fromCharCode(65 + i)})`).join(' -> ')}</strong><br>
+                    Total Jarak: ${totalDistance.toFixed(2)} km
+                </div>`;
+                dpProcess.innerHTML += stepDetails;
+            });
+
+            // Tampilkan rute terbaik
+            var bestRouteElement = document.getElementById('best-route');
+            bestRouteElement.innerHTML = `<h3>Rute Terbaik</h3>
+                <p>${bestRoute.map(i => locations[i].name + ` (${String.fromCharCode(65 + i)})`).join(' -> ')}</p>
+                <p>Total Jarak: ${minDistance.toFixed(2)} km</p>`;
+        }
+
+        // Fungsi untuk kembali ke halaman hasil rute
+        function goBack() {
+            window.location.href = 'rute.html';
+        }
+
+        // Tampilkan hasil DP
+        displayDPResults();
+    </script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Lokasi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: url('./images/bg.svg');
+            background-size: cover;
+            background-attachment:fixed;
+
+        }
+        main{
+            padding: 20px 50px;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+        }
+        .title-wrapper {
+            display: flex;
+            align-items: center;
+        }
+        .title {
+            width: 70%;
+            color: #2F3879;
+        }
+        .sub-title {
+            color: #2F3879;
+            font-weight: bold;
+            font-size: 16pt;
+        }
+        input[type=text], input[type=number] {
+            padding: 10px;
+            margin: 5px 0;
+            width: 600px;
+            border-radius: 5px;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        button {
+            border-radius: 5px;
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .action-button {
+            width: 675px;
+            display: flex;
+            gap: 8px;
+        }
+        .remove-button {
+            background-color: #f44336;
+            margin-left: 10px;
+            width: auto;
+            cursor: pointer;
+        }
+        .predefined-button {
+            width: auto;
+            margin: 5px 5px 5px 0;
+        }
+        .edit-button {
+            width: auto;
+            margin: 5px 5px 5px 0;
+            background-color: yellowgreen;
+        }
+        .row {
+            display: flex;
+            flex-direction: column;
+            width: 70%;
+        }
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+        }
+        .bullet{
+            background-color: #2F3879;
+            color: white;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <main> 
+        <div class="title-wrapper">
+            <img class="logo" src="./images/logo.png" />
+            <h1 class="title">Sistem Penentuan Urutan Rute Pengiriman Paket Menggunakan Dynamic Programming</h1>
+        </div>
+        <div class="row">
+            <p class="sub-title">Silahkan masukkan lokasi</p>
+            <div class="input-wrapper">
+                <div class="bullet">1</div>
+                <input type="text" id="start-location" value="JNT Kertosono" placeholder="Masukkan titik awal (alamat atau Latitude,Longitude)" />
+            </div>
+            <div class="input-wrapper">
+                <div class="bullet">2</div>
+                <input type="text" class="location-input" placeholder="Masukkan alamat atau Latitude,Longitude" />
+            </div>
+            <div id="dynamic-inputs"></div>
+            <div class="action-button">
+                <button onclick="addLocationInput()">Tambah Lokasi</button>
+                <button onclick="calculateRoute()">Cari Rute</button>
+            </div>
+        </div>
+    
+    </main>
+
+    <script>
+        function addLocationInput() {
+            var dynamicInputs = document.getElementById('dynamic-inputs');
+            var newInput = document.createElement('div');
+            newInput.style.display = 'flex';
+            newInput.innerHTML = `<div class="bullet">${dynamicInputs.children.length + 3}</div>
+                                  <input type="text" class="location-input" placeholder="Masukkan alamat atau Latitude,Longitude" />
+                                  <button class="remove-button" onclick="removeLocationInput(this)">Hapus</button>`;
+            dynamicInputs.appendChild(newInput);
+        }
+    
+        function removeLocationInput(button) {
+            button.parentNode.remove();
+        }
+    
+        function getCoordinates(inputValue) {
+            var trimmedValue = inputValue.trim();
+            var latlon = trimmedValue.split(',');
+            if (latlon.length === 2) {
+                var lat = parseFloat(latlon[0]);
+                var lon = parseFloat(latlon[1]);
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    return Promise.resolve({
+                        type: 'coordinates',
+                        lat: lat,
+                        lon: lon,
+                        name: `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`
+                    });
+                }
+            }
+            return fetch(`https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(trimmedValue)}&apiKey=af31d3aec56549f3907ab2ed1c9d534f`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.features.length > 0) {
+                        var placeName = data.features[0].properties.formatted;
+                        return {
+                            type: 'address',
+                            lat: data.features[0].geometry.coordinates[1],
+                            lon: data.features[0].geometry.coordinates[0],
+                            name: placeName
+                        };
+                    } else {
+                        throw new Error('Address not found');
+                    }
+                });
+        }
+    
+        function calculateRoute() {
+            var startInput = document.getElementById('start-location').value.trim();
+            var startPromise;
+            
+            var latLon = startInput.split(',');
+            if (latLon.length === 2) {
+                var lat = parseFloat(latLon[0]);
+                var lon = parseFloat(latLon[1]);
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    startPromise = Promise.resolve({
+                        type: 'coordinates',
+                        lat: lat,
+                        lon: lon,
+                        name: `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`
+                    });
+                } else {
+                    startPromise = getCoordinates(startInput);
+                }
+            } else {
+                startPromise = getCoordinates(startInput);
+            }
+    
+            startPromise.then(startLocation => {
+                
+                if (startInput === 'JNT Kertosono') {
+                    var locations = [
+                        { coord: [-7.6011199, 112.1024242], name: 'JNT Kertosono'}
+                        ];
+               } else {
+                    var startLocationDisplay = startLocation.type === 'coordinates' ? `Lat: ${startLocation.lat.toFixed(6)}, Lon: ${startLocation.lon.toFixed(6)}` : startLocation.name;
+                    document.getElementById('start-location').value = startLocationDisplay;
+                    var locations = [
+                        { coord: [startLocation.lat, startLocation.lon], name: startLocation.name }
+                    ];
+                }
+                var promises = [];
+                var inputs = document.querySelectorAll('.location-input');
+                inputs.forEach(input => {
+                    promises.push(getCoordinates(input.value));
+                });
+    
+                Promise.all(promises)
+                    .then(results => {
+                        results.forEach(result => {
+                            locations.push({
+                                coord: [result.lat, result.lon],
+                                name: result.name
+                            });
+                        });
+    
+                        sessionStorage.setItem('locations', JSON.stringify(locations));
+                        window.location.href = 'rute.html';
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        alert('Ada masalah saat mengkonversi alamat atau koordinat.');
+                    });
+            })
+            .catch(error => {
+                console.error(error);
+                alert('Ada masalah saat mengambil koordinat titik awal.');
+            });
+        }
+   
+    </script>
+</body>
+</html>

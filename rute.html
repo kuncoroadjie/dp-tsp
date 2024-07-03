@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hasil Rute</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #controls {
+            width: 300px;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            background: white;
+        }
+        #map {
+            flex: 1;
+        }
+        .leaflet-routing-container {
+            display: none;
+        }
+        #route-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .route-item {
+            display: flex;
+            align-items: center;
+        }
+        button {
+            border-radius: 5px;
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .bullet{
+            background-color: #2F3879;
+            color: white;
+            padding: 10px 13px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            margin-right: 10px;
+            font-size: 10pt;
+        }
+        .route-text{
+            color: #2F3879;
+            margin-left: 5px;
+            font-size: 10pt;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h1>Hasil Rute</h1>
+        <div id="route-info"></div>
+        <button onclick="showDPResults()">Lihat Hasil Perhitungan DP</button>
+        <button onclick="goBack()">Kembali</button>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([-7.811130, 111.999824], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        var locations = JSON.parse(sessionStorage.getItem('locations'));
+        var routingControl;
+        var markers = [];
+
+        // Fungsi untuk menghitung jarak Euclidean dalam kilometer
+        function calculateDistance(coord1, coord2) {
+            var R = 6371; // Radius of the Earth in km
+            var dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
+            var dLon = (coord2[1] - coord1[1]) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(coord1[0] * Math.PI / 180) * Math.cos(coord2[0] * Math.PI / 180) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // Fungsi untuk mendapatkan semua permutasi dari array
+        function permute(permutation) {
+            var length = permutation.length,
+                result = [permutation.slice()],
+                c = new Array(length).fill(0),
+                i = 1, k, p;
+
+            while (i < length) {
+                if (c[i] < i) {
+                    k = i % 2 && c[i];
+                    p = permutation[i];
+                    permutation[i] = permutation[k];
+                    permutation[k] = p;
+                    ++c[i];
+                    i = 1;
+                    result.push(permutation.slice());
+                } else {
+                    c[i] = 0;
+                    ++i;
+                }
+            }
+            return result;
+        }
+
+        // Fungsi untuk menghitung total jarak suatu rute
+        function calculateTotalDistance(route, distances) {
+            var totalDistance = 0;
+            for (var i = 0; i < route.length - 1; i++) {
+                totalDistance += distances[route[i]][route[i + 1]];
+            }
+            return totalDistance;
+        }
+
+        function calculateAndDisplayRoute() {
+            var distances = [];
+            for (var i = 0; i < locations.length; i++) {
+                distances[i] = [];
+                for (var j = 0; j < locations.length; j++) {
+                    distances[i][j] = calculateDistance(locations[i].coord, locations[j].coord);
+                }
+            }
+
+            var remainingLocations = [];
+            for (var i = 1; i < locations.length; i++) remainingLocations.push(i);
+
+            var dpProcess = document.getElementById('dp-process');
+
+            // Semua permutasi dari rute
+            var allPermutations = permute(remainingLocations);
+            var bestRoute = null;
+            var minDistance = Infinity;
+
+            allPermutations.forEach(function(perm) {
+                var route = [0].concat(perm).concat([0]);
+                var totalDistance = calculateTotalDistance(route, distances);
+                if (totalDistance < minDistance) {
+                    minDistance = totalDistance;
+                    bestRoute = route;
+                }
+            });
+
+            var order = bestRoute;
+
+            routingControl = L.Routing.control({
+                waypoints: order.map(i => L.latLng(locations[i].coord)),
+                createMarker: function() { return null; },
+                lineOptions: {
+                    styles: [{ color: getRandomColor(), weight: 4 }]
+                },
+                routeWhileDragging: false,
+                addWaypoints: false,
+                draggableWaypoints: false
+            }).addTo(map);
+
+            order.forEach(function(index, i) {
+                var label = String.fromCharCode(65 + index);
+                var marker = L.marker(locations[index].coord, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: "<div style='background-color:#2A93EE;border-radius:12px;width:24px;height:24px;text-align:center;color:white;font-size:16px;line-height:24px;'>" + label + "</div>",
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 40]
+                    })
+                }).addTo(map);
+                marker.bindPopup(locations[index].name);
+                markers.push(marker);
+            });
+
+            var routeInfo = document.getElementById('route-info');
+            routeInfo.innerHTML = '<b>Urutan Rute</b>';
+            order.forEach(function(index) {
+                var label = String.fromCharCode(65 + index);
+                routeInfo.innerHTML +="<div class='route-item'><span class='bullet'>"+label+"</span>"  + " -  " + "<span class='route-text'>" + locations[index].name +"</div>"+"</div>";
+            });
+
+            sessionStorage.setItem('order', JSON.stringify(order));
+        }
+
+        function showDPResults() {
+            window.location.href = 'perhitungan.html';
+        }
+
+        function goBack() {
+            window.location.href = 'input.html'
+        }
+
+        function getRandomColor() {
+            var letters = '0123456789ABCDEF';
+            var color = '#';
+            for (var i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        calculateAndDisplayRoute();
+    </script>
+</body>
+</html>
